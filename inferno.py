@@ -171,7 +171,7 @@ elif not st.session_state.game_over:
     # Sidebar
     with st.sidebar:
         if st.button("🧹 Reset All"): st.session_state.clear(); st.rerun()
-            with st.expander("ℹ️ คู่มือสถานะ (Effect Guide)"):
+        with st.expander("ℹ️ คู่มือสถานะ (Effect Guide)"):
             st.markdown("""
             <small>
             <b>สถานะบุคคล</b><br>
@@ -524,6 +524,7 @@ else:
                 data = [{"Day": h['day'], m['name']: h['scores'][m['name']][w['name']], w['name']: h['scores'][w['name']][m['name']]} for h in st.session_state.score_history]
                 st.line_chart(pd.DataFrame(data).set_index("Day"))
         if st.button("🔄 New Game"): st.session_state.clear(); st.rerun()
+
 
 
 
