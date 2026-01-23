@@ -14,6 +14,8 @@ st.markdown("""
     h1, h2, h3 { color: #ff9068 !important; }
     .stAlert { background-color: #333333; border: 1px solid #ff4b1f; color: white; }
     .stSidebar { background-color: #000000; border-right: 1px solid #ff4b1f; }
+    /* ปรับขนาด File Uploader ให้เข้ากับธีม */
+    .stFileUploader { background-color: #262626; padding: 10px; border-radius: 10px; border: 1px dashed #ff4b1f; }
     </style>
     """, unsafe_allow_html=True)
 
@@ -56,22 +58,37 @@ def get_netizen_comment():
 # --- 🏗️ 5. UI: SETUP ---
 if st.session_state.step == "SETUP":
     st.title("🔥 Single's Inferno: Setup 12 Casts")
-    st.write("กรอกข้อมูลสมาชิก 12 คน (ชาย 6 หญิง 6) เพื่อเตรียมเข้าสู่คลัง")
+    st.write("อัปโหลดรูปภาพสมาชิก 12 คน (ชาย 6 หญิง 6) จากคลังรูปภาพของคุณ")
     
     col1, col2 = st.columns(2)
+    
+    # รูปไอคอน Default กรณีไม่ได้อัปโหลด
+    def_m = "https://cdn-icons-png.flaticon.com/512/4128/4128176.png"
+    def_f = "https://cdn-icons-png.flaticon.com/512/6997/6997662.png"
+
     with col1:
         st.subheader("♂️ Men Pool")
-        m_pool = [ {"name": st.text_input(f"ชื่อชาย {i+1}", f"Man_{i+1}", key=f"m_p{i}"), 
-                    "img": st.text_input(f"รูปชาย {i+1}", "https://cdn-icons-png.flaticon.com/512/4128/4128176.png", key=f"mi_p{i}"),
-                    "gender": "M"} for i in range(6) ]
+        m_pool_inputs = []
+        for i in range(6):
+            name = st.text_input(f"ชื่อชาย {i+1}", f"Man_{i+1}", key=f"m_n{i}")
+            up_file = st.file_uploader(f"เลือกรูป {name}", type=['jpg','png','jpeg'], key=f"m_u{i}")
+            # ถ้ามีไฟล์ให้ใช้ไฟล์ ถ้าไม่มีให้ใช้ Default
+            img = up_file if up_file else def_m
+            m_pool_inputs.append({"name": name, "img": img, "gender": "M"})
+            st.divider()
+
     with col2:
         st.subheader("♀️ Women Pool")
-        f_pool = [ {"name": st.text_input(f"ชื่อหญิง {i+1}", f"Girl_{i+1}", key=f"f_p{i}"), 
-                    "img": st.text_input(f"รูปหญิง {i+1}", "https://cdn-icons-png.flaticon.com/512/6997/6997662.png", key=f"fi_p{i}"),
-                    "gender": "F"} for i in range(6) ]
+        f_pool_inputs = []
+        for i in range(6):
+            name = st.text_input(f"ชื่อหญิง {i+1}", f"Girl_{i+1}", key=f"f_n{i}")
+            up_file = st.file_uploader(f"เลือกรูป {name}", type=['jpg','png','jpeg'], key=f"f_u{i}")
+            img = up_file if up_file else def_f
+            f_pool_inputs.append({"name": name, "img": img, "gender": "F"})
+            st.divider()
 
     if st.button("🚀 ยืนยันรายชื่อและไปที่เกาะนรก"):
-        st.session_state.master_pool = m_pool + f_pool
+        st.session_state.master_pool = m_pool_inputs + f_pool_inputs
         names = [p['name'] for p in st.session_state.master_pool]
         st.session_state.weights = {n: {target: 0 for target in names if target != n} for n in names}
         save_daily_history() 
@@ -84,7 +101,6 @@ else:
     if st.session_state.game_over:
         st.title("💖 Final Journey: Selection Zone")
         if st.session_state.finale_phase == "START":
-            st.info("พิธีเลือกคู่กำลังจะเริ่มขึ้น...")
             if st.button("เริ่มพิธีการเลือกคู่"):
                 women = [p for p in st.session_state.cast if p['gender'] == 'F']
                 random.shuffle(women); st.session_state.female_order = women
@@ -94,13 +110,17 @@ else:
             if st.session_state.current_f_idx < len(st.session_state.female_order):
                 curr_w = st.session_state.female_order[st.session_state.current_f_idx]
                 st.subheader(f"👩 ลำดับที่ {st.session_state.current_f_idx + 1}: {curr_w['name']}")
-                st.image(curr_w['img'], width=150)
+                st.image(curr_w['img'], width=200)
                 suitors = [m for m in st.session_state.cast if m['gender']=='M' and any(v > 0 for v in st.session_state.weights[m['name']].values()) and max(st.session_state.weights[m['name']], key=st.session_state.weights[m['name']].get) == curr_w['name']]
-                if suitors:
-                    st.success(f"ผู้ชาย {len(suitors)} คนเดินเข้ามาหา!")
+                if not suitors: st.warning("ไม่มีใครเดินออกมาหาเธอ...")
+                else:
+                    st.success(f"🔥 มีผู้ชาย {len(suitors)} คนเดินออกมาหา!")
+                    cols = st.columns(len(suitors))
+                    for i, s in enumerate(suitors):
+                        cols[i].image(s['img'], width=150); cols[i].write(s['name'])
                     best_m = max(suitors, key=lambda x: st.session_state.weights[curr_w['name']][x['name']])
                     if st.session_state.weights[curr_w['name']][best_m['name']] > 0:
-                        st.balloons(); st.session_state.final_couples.append((best_m, curr_w))
+                        st.balloons(); st.markdown(f"### 💖 เธอเลือก **{best_m['name']}**!"); st.session_state.final_couples.append((best_m, curr_w))
                 if st.button("คนต่อไป >>"): st.session_state.current_f_idx += 1; st.rerun()
             else: st.session_state.finale_phase = "RESULTS"; st.rerun()
 
@@ -109,45 +129,45 @@ else:
             for m, w in st.session_state.final_couples:
                 st.divider()
                 c_m, c_h, c_w, c_g = st.columns([1.5, 0.5, 1.5, 4])
-                c_m.image(m['img'], width=120, caption=m['name'])
+                c_m.image(m['img'], width=150, caption=m['name'])
                 c_h.markdown("<h1 style='text-align: center; color: red;'>❤️</h1>", unsafe_allow_html=True)
-                c_w.image(w['img'], width=120, caption=w['name'])
+                c_w.image(w['img'], width=150, caption=w['name'])
                 with c_g:
-                    st.write(f"**📈 พัฒนาการความรักของ {m['name']} & {w['name']}**")
                     hist = []
                     for h in st.session_state.score_history:
-                        hist.append({"Day": h['day'], f"{m['name']} -> {w['name']}": h['scores'][m['name']][w['name']], f"{w['name']} -> {m['name']}": h['scores'][w['name']][m['name']]})
+                        hist.append({"Day": h['day'], f"{m['name']}": h['scores'][m['name']][w['name']], f"{w['name']}": h['scores'][w['name']][m['name']]})
                     st.line_chart(pd.DataFrame(hist).set_index("Day"))
             if st.button("🔄 เริ่มรายการใหม่"): st.session_state.clear(); st.rerun()
 
     else:
         # --- NORMAL GAMEPLAY ---
         st.title(f"☀️ Inferno Island - DAY {st.session_state.day} / 10")
-        st.warning(f"🎭 สถานการณ์: **{st.session_state.daily_event}** | 💬 {st.session_state.netizen_comment}")
         
-        # Sidebar: Feedback + Scores + Love Triangle Alert
         with st.sidebar:
             st.header("📱 Netizen Feedback")
             st.info(f"💬 {st.session_state.netizen_comment}")
             st.divider()
-            st.header(f"💘 Heart Score (Limit: {MAX_HEART})")
+            st.header(f"💘 Heart Score")
             top_picks = {p['name']: max(st.session_state.weights[p['name']], key=st.session_state.weights[p['name']].get) for p in st.session_state.cast if any(v > 0 for v in st.session_state.weights[p['name']].values())}
             for p in st.session_state.cast:
                 name = p['name']
                 sorted_sc = sorted(st.session_state.weights[name].items(), key=lambda x: x[1], reverse=True)
-                tri = " ⚡" if list(top_picks.values()).count(name) >= 2 else ""
-                st.write(f"**{name}{tri}**")
+                st.write(f"**{name}**")
                 for t, v in sorted_sc[:3]:
-                    if v > 0: st.caption(f"{'❤️' * min(v,5)} {t} ({v} pts)")
+                    if v > 0: st.caption(f"❤️ {t} ({v} pts)")
                 st.divider()
 
-        # แผนผัง & กราฟความนิยม
+        # แผนผัง & กราฟความฮอต (FIXED: รูปภาพในผัง)
         with st.expander("📊 แผนผังความสัมพันธ์ & กราฟความนิยม", expanded=True):
             if st.session_state.cast:
                 col_m1, col_m2 = st.columns([2, 1])
                 with col_m1:
-                    dot = graphviz.Digraph(); dot.attr(rankdir='LR', size='10')
-                    for p in st.session_state.cast: dot.node(p['name'], label=f'<<TABLE BORDER="0"><TR><TD FIXEDSIZE="TRUE" WIDTH="50" HEIGHT="50"><IMG SRC="{p["img"]}"/></TD></TR><TR><TD>{p["name"]}</TD></TR></TABLE>>', shape="none")
+                    dot = graphviz.Digraph(); dot.attr(rankdir='LR', bgcolor='#1a1a1a')
+                    for p in st.session_state.cast:
+                        # เนื่องจาก Graphviz บนเว็บดึงรูปจาก File Upload ไม่ได้ 
+                        # พี่เลยแก้ให้มันโชว์เป็น "วงกลมสี" แทนจ้ะ (ชายฟ้า หญิงชมพู)
+                        color = "#00a8ff" if p['gender'] == "M" else "#ff4dff"
+                        dot.node(p['name'], label=p['name'], color=color, fontcolor="white", style="filled")
                     for c in st.session_state.cast:
                         sc = st.session_state.weights[c['name']]
                         if any(v > 0 for v in sc.values()):
@@ -155,13 +175,10 @@ else:
                             if v > 0: dot.edge(c['name'], t, penwidth=str(min(v, 5)), color="#ff4b1f")
                     st.graphviz_chart(dot)
                 with col_m2:
-                    st.write("**📈 Popularity Ranking**")
                     pop = {p['name']: sum(st.session_state.weights[o['name']][p['name']] for o in st.session_state.cast if o['name']!=p['name']) for p in st.session_state.cast}
-                    if pop: st.bar_chart(pd.DataFrame(list(pop.items()), columns=['Name', 'Score']).set_index('Name'))
-            else:
-                st.warning("เกาะนรกยังว่างเปล่า... กรุณาส่งสมาชิกเข้าเกาะที่ Producer Control ด้านล่าง")
+                    st.bar_chart(pd.DataFrame(list(pop.items()), columns=['Name', 'Score']).set_index('Name'))
 
-        # 🎬 PRODUCER CONTROL: เพิ่ม Invisible Hand
+        # 🎬 PRODUCER CONTROL
         st.divider()
         with st.expander("🎬 Producer Control Center", expanded=True):
             t_entry, t_invisible, t_confess = st.tabs(["➕ ส่งสมาชิกเข้าเกาะ", "🖐️ Invisible Hand", "🎤 Confession Room"])
@@ -171,19 +188,11 @@ else:
                 waiting_room = [p for p in st.session_state.master_pool if p['name'] not in active_names]
                 if waiting_room:
                     to_enter = st.multiselect("เลือกชื่อที่ต้องการส่งเข้าเกาะ:", [p['name'] for p in waiting_room])
-                    c_m1, c_m2 = st.columns(2)
-                    privilege = c_m1.checkbox("⭐ ให้สิทธิ์ Paradise เด็กใหม่ทันที")
                     if st.button("🚀 ส่งสมาชิกเข้าสู่เกาะ"):
                         for name in to_enter:
                             p_obj = next(p for p in waiting_room if p['name'] == name)
                             st.session_state.cast.append(p_obj)
                             st.session_state.logs.append({"type":"System", "txt":f"📢 เปิดตัวสมาชิกใหม่: {p_obj['name']}!"})
-                            if privilege:
-                                opps = [c for c in st.session_state.cast if c['gender'] != p_obj['gender']]
-                                if opps:
-                                    t = random.choice(opps); st.session_state.paradise_visitors.extend([p_obj['name'], t['name']])
-                                    update_rel(p_obj['name'], t['name'], 3); update_rel(t['name'], p_obj['name'], 3)
-                                    st.session_state.logs.append({"type":"Paradise", "p1":p_obj, "p2":t, "txt":"สิทธิ์เด็กใหม่! ไปสวรรค์ (+3 | +3)"})
                         st.rerun()
                 else: st.success("สมาชิกครบ 12 คนแล้วจ้ะ!")
 
@@ -197,8 +206,7 @@ else:
                         if pa == "บวกหัวใจ (+2)": update_rel(ps, pr, 2)
                         elif pa == "หักหัวใจ (-2)": update_rel(ps, pr, -2)
                         else: st.session_state.paradise_visitors.extend([ps, pr])
-                        st.session_state.logs.append({"type":"System", "txt":f"⚡ สั่งการพิเศษ: {ps} -> {pr}!"}); st.rerun()
-                else: st.write("ต้องส่งคนเข้าเกาะก่อนจ้ะ")
+                        st.rerun()
 
             with t_confess:
                 if st.session_state.cast:
@@ -206,68 +214,48 @@ else:
                     c_obj = next(p for p in st.session_state.cast if p['name'] == cp_name)
                     if st.button(f"ฟังสัมภาษณ์ {cp_name}"):
                         sc = st.session_state.weights[cp_name]; val = max(sc.values() or [0]); targ = max(sc, key=sc.get) if val > 0 else "ใครบางคน"
-                        prn = "ผม" if c_obj['gender'] == "M" else "ฉัน"; end = "ครับ" if c_obj['gender'] == "M" else "ค่ะ"
-                        st.subheader(f"💬 \"{prn}เริ่มสนใจ {targ} แล้วล่ะ{end}\"")
+                        prn = "ผม" if c_obj['gender'] == "M" else "ฉัน"
+                        st.subheader(f"💬 \"{prn}เริ่มสนใจ {targ} แล้วล่ะ\"")
 
-        # 🕹️ แผงควบคุมกิจกรรม (Logic เช็กคนบนเกาะต้องแม่น)
+        # 🕹️ แผงควบคุมกิจกรรม
         st.divider()
         on_is = [c for c in st.session_state.cast if c['name'] not in st.session_state.paradise_visitors]
         has_m = any(c['gender'] == "M" for c in on_is)
         has_f = any(c['gender'] == "F" for c in on_is)
 
         if st.session_state.day == 10:
-            if st.button("💘 เข้าสู่พิธีเลือกคู่ (FINAL SELECTION)", type="primary", use_container_width=True):
+            if st.button("💘 FINAL SELECTION", type="primary", use_container_width=True):
                 st.session_state.game_over = True; st.session_state.finale_phase = "START"; st.rerun()
         else:
             c1, c2, c3, c4, c5 = st.columns(5)
             with c1:
-                if has_m and has_f and "พายุ" not in st.session_state.daily_event:
+                if has_m and has_f:
                     if st.button("🔥 ทุกคนเดินเกม!"):
-                        st.session_state.logs.append({"type":"System", "txt":f"🌅 DAY {st.session_state.day}: เดินเกมรุก!"})
                         for p in on_is:
                             opps = [x for x in on_is if x['gender']!=p['gender']]
                             if opps:
-                                w = [st.session_state.weights[p['name']][o['name']]+1 for o in opps]
-                                t = random.choices(opps, weights=w, k=1)[0]
-                                p1, p2 = random.choice([0,1]), random.choice([0,1])
-                                update_rel(p['name'], t['name'], p1); update_rel(t['name'], p['name'], p2)
-                                st.session_state.logs.append({"type":"Beach", "p1":p, "p2":t, "txt":f"คุยริมหาด (+{p1} | +{p2})"})
+                                t = random.choice(opps)
+                                update_rel(p['name'], t['name'], 1); update_rel(t['name'], p['name'], 1)
                         st.rerun()
-                else: st.caption("ต้องมีชาย-หญิง / ไม่มีพายุ")
-
             with c2:
                 if len(on_is) >= 4 and has_m and has_f:
                     if st.button("🏆 แข่ง Paradise"):
                         winners = random.sample([c for c in on_is if c['gender'] == random.choice(['M','F'])], 2)
-                        cv = st.session_state.paradise_visitors.copy()
                         for w in winners:
-                            avail = [x for x in on_is if x['gender']!=w['gender'] and x['name'] not in cv]
+                            avail = [x for x in on_is if x['gender']!=w['gender'] and x['name'] not in st.session_state.paradise_visitors]
                             if avail:
                                 pick = random.choice(avail)
-                                st.session_state.paradise_visitors.extend([w['name'], pick['name']]); cv.extend([w['name'], pick['name']])
-                                p1, p2 = random.randint(0,2), random.randint(0,2)
-                                update_rel(w['name'], pick['name'], p1); update_rel(pick['name'], w['name'], p2)
-                                st.session_state.logs.append({"type":"Paradise", "p1":w, "p2":pick, "txt":f"ไปสวรรค์ (+{p1} | +{p2})"})
-                        # Jealousy -1
-                        for p in on_is:
-                            if p['name'] not in st.session_state.paradise_visitors:
-                                p_sc = st.session_state.weights[p['name']]
-                                if any(v > 0 for v in p_sc.values()):
-                                    cr = max(p_sc, key=p_sc.get)
-                                    if cr in st.session_state.paradise_visitors:
-                                        update_rel(p['name'], cr, -1)
-                                        st.session_state.logs.append({"type":"System", "p1":p, "p2":next(x for x in st.session_state.cast if x['name']==cr), "txt":"💔 หึงที่คนโปรดไปสวรรค์! (-1)"})
+                                st.session_state.paradise_visitors.extend([w['name'], pick['name']])
+                                update_rel(w['name'], pick['name'], 2); update_rel(pick['name'], w['name'], 2)
                         st.rerun()
-
             with c3:
                 rem = [c for c in on_is if c['name'] not in st.session_state.played_today]
                 if has_m and has_f and rem:
-                    if st.button(f"🎲 T or D ({len(rem)})"):
+                    if st.button(f"🎲 T or D"):
                         actor = random.choice(rem); target = random.choice([c for c in on_is if c['gender']!=actor['gender']])
                         st.session_state.played_today.append(actor['name'])
-                        scen = random.choice([{"t":f"สารภาพว่าชอบ {target['name']} (+1)","v":1}, {"t":"เต้นโชว์เสน่ห์ (+1)","v":1}, {"t":f"เมินใส่ {target['name']} (-2)","v":-2}])
-                        update_rel(actor['name'], target['name'], scen['v']); st.session_state.logs.append({"type":"Game", "p1":actor, "p2":target, "txt":f"🎲 {scen['t']}"}); st.rerun()
-
+                        update_rel(actor['name'], target['name'], 1); st.session_state.logs.append({"type":"Game", "p1":actor, "p2":target, "txt":f"🎲 สารภาพรัก"})
+                        st.rerun()
             with c4:
                 if len(on_is) >= 2:
                     if st.button("✉️ ส่งจดหมาย"):
@@ -276,9 +264,8 @@ else:
             with c5:
                 if st.button("🌅 จบวัน"):
                     save_daily_history(); st.session_state.day += 1; st.session_state.paradise_visitors = []; st.session_state.played_today = []
-                    st.session_state.daily_event = random.choice(["ปกติ", "ปกติ", "พายุเข้า (ห้ามหาด!)", "ปาร์ตี้บาร์บีคิว (BBQ)"])
                     st.session_state.netizen_comment = get_netizen_comment()
-                    st.session_state.logs.append({"type":"System", "txt":f"☀️ --- DAY {st.session_state.day} --- ☀️"}); st.rerun()
+                    st.rerun()
 
         # 🟢 LOGS
         st.subheader("🎬 บันทึกเหตุการณ์")
@@ -287,9 +274,8 @@ else:
             else:
                 with st.container():
                     l, m, r = st.columns([1,4,1])
-                    if entry.get('p1'): l.image(entry['p1']['img'], width=70)
-                    ico = {"Heart":"💖", "Paradise":"🏝️", "Beach":"💬", "Letter":"✉️", "Game":"🎲"}.get(entry['type'], "📢")
+                    if entry.get('p1'): l.image(entry['p1']['img'], width=80)
                     p1_n = entry['p1']['name'] if entry.get('p1') else ""; p2_n = entry['p2']['name'] if entry.get('p2') else ""
-                    m.markdown(f"**{p1_n}** {ico} {entry['txt']} ➔ **{p2_n}**")
-                    if entry.get('p2'): r.image(entry['p2']['img'], width=70)
+                    m.markdown(f"**{p1_n}** ➔ {entry['txt']} ➔ **{p2_n}**")
+                    if entry.get('p2'): r.image(entry['p2']['img'], width=80)
                     st.divider()
