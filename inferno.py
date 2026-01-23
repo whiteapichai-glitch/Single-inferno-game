@@ -228,14 +228,58 @@ elif not st.session_state.game_over:
     tab1, tab2, tab3 = st.tabs(["➕ เพิ่มสมาชิก", "🔮 อีเวนต์พิเศษ", "🌪️ ข่าวลือ"])
     with tab1:
         if st.session_state.waiting_list:
-            c1, c2 = st.columns([2, 1])
+            st.write("### 🆕 เปิดตัวสมาชิกใหม่")
+            c1, c2 = st.columns(2)
+            
+            # 1. เลือกคนเข้าเกาะ
             to_add_name = c1.selectbox("เลือกคนเข้า:", [p['name'] for p in st.session_state.waiting_list])
-            if c2.button("🚀 ส่งเข้าเกาะ"):
+            
+            # 2. ออปชันเสริม: สิทธิ์พิเศษพาไปสวรรค์
+            use_privilege = c2.checkbox("⭐ ให้สิทธิ์พาไปสวรรค์ทันที!")
+            partner_choice = None
+            
+            if use_privilege:
+                # เลือกคู่เดตจากคนที่มีอยู่ในเกาะตอนนี้
+                current_cast_names = [c['name'] for c in st.session_state.cast]
+                partner_choice = c2.selectbox("เลือกคนที่จะพาไป:", current_cast_names)
+
+            # 3. ปุ่มกดส่งเข้าเกาะ
+            if st.button("🚀 ส่งเข้าเกาะ"):
+                # ย้ายคนจาก Waiting List -> Cast
                 p_obj = next(p for p in st.session_state.waiting_list if p['name'] == to_add_name)
                 st.session_state.waiting_list.remove(p_obj)
-                st.session_state.cast.append(p_obj)
-                log_event("System", f"📢 NEWCOMER! {to_add_name} เดินลงมาที่ชายหาดแล้ว!", p1=p_obj)
+                st.session_state.cast.append(p_obj) 
+                
+                main_txt = f"📢 NEWCOMER! {to_add_name} มาแล้ว!"
+                
+                # ถ้าใช้สิทธิ์พิเศษ
+                if use_privilege and partner_choice:
+                    st.session_state.paradise_visitors.extend([to_add_name, partner_choice])
+                    
+                    # สุ่มคะแนนเดตแรก (เด็กใหม่มักได้บัฟคะแนนดีหน่อย)
+                    s1 = random.randint(3, 5) # เด็กใหม่ให้คะแนน
+                    s2 = random.randint(2, 4) # คู่เดตให้คะแนนกลับ
+                    
+                    real_s1, _ = update_rel(to_add_name, partner_choice, s1)
+                    real_s2, _ = update_rel(partner_choice, to_add_name, s2)
+                    
+                    # ตั้งค่า Vibe (ส่วนใหญ่เดตแรกเด็กใหม่มักจะ Good หรือ Soulmate)
+                    st.session_state.couple_vibe[tuple(sorted((to_add_name, partner_choice)))] = "GOOD"
+                    
+                    main_txt += f" และใช้สิทธิ์พา {partner_choice} ไปสวรรค์ทันที! <br><span class='log-score'>({to_add_name} +{real_s1} | {partner_choice} +{real_s2})</span>"
+                    
+                    # ระบบหึง (Jealousy Trigger)
+                    for p in st.session_state.cast:
+                        if p['name'] not in [to_add_name, partner_choice]:
+                            my_crush = get_top_crush(p['name'])
+                            if my_crush == partner_choice:
+                                st.session_state.statuses[p['name']] = "CLOSED"
+                                log_event("System", f"💔 {p['name']} ช็อคที่ {partner_choice} โดนปาดหน้าเค้ก! -> ปิดใจ")
+
+                log_event("System", main_txt, p1=p_obj)
                 st.rerun()
+        else:
+            st.success("สมาชิกครบแล้ว!")
     with tab2:
         col_s1, col_s2 = st.columns(2)
         with col_s1:
@@ -468,4 +512,5 @@ else:
                 data = [{"Day": h['day'], m['name']: h['scores'][m['name']][w['name']], w['name']: h['scores'][w['name']][m['name']]} for h in st.session_state.score_history]
                 st.line_chart(pd.DataFrame(data).set_index("Day"))
         if st.button("🔄 New Game"): st.session_state.clear(); st.rerun()
+
 
