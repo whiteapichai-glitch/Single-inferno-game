@@ -24,7 +24,7 @@ st.markdown("""
     
     /* Log Style */
     .log-text { text-align: center; font-size: 1.1em; padding-top: 10px; }
-    .log-score { color: #ff9068; font-weight: bold; }
+    .log-score { color: #ff9068; font-weight: bold; font-size: 0.9em; }
     </style>
     """, unsafe_allow_html=True)
 
@@ -58,39 +58,38 @@ if 'step' not in st.session_state:
 
 # --- 🧪 4. LOGIC FUNCTIONS ---
 def log_event(type, text, p1=None, p2=None):
-    # p1 = ผู้กระทำ (ซ้าย), p2 = ผู้ถูกกระทำ (ขวา)
     entry = {"day": st.session_state.day, "type": type, "txt": text, "p1": p1, "p2": p2}
     st.session_state.logs.append(entry)
 
-def update_rel(a, b, val, reason=""):
-    if a not in st.session_state.weights or b not in st.session_state.weights[a]: return "ERROR"
+def update_rel(a, b, val):
+    # ฟังก์ชันนี้คืนค่าคะแนนจริงที่บวกเพิ่ม (Actual Score Added)
+    if a not in st.session_state.weights or b not in st.session_state.weights[a]: return 0, "ERROR"
     
     pair_key = tuple(sorted((a, b)))
     
-    # Check Vibe (Awkward)
+    # 1. Check Vibe (Awkward)
     if st.session_state.couple_vibe.get(pair_key) == "AWKWARD":
-        return "BLOCKED_BY_AWKWARD" 
+        return 0, "BLOCKED" # คะแนนไม่ขึ้น
 
-    # Check Status (Closed/Open)
+    # 2. Check Status (Closed/Open)
     status = st.session_state.statuses.get(b, None)
     final_val = val
     
+    # Soulmate Buff
     if st.session_state.couple_vibe.get(pair_key) == "SOULMATE" and val > 0:
-        final_val *= 2
+        final_val += 1 # Bonus
 
     if status == 'CLOSED':
-        final_val = 0 
-        if val > 0: 
-            curr = st.session_state.weights[a][b]
-            st.session_state.weights[a][b] = max(0, curr - 1)
-        return "BLOCKED_BY_CLOSED"
+        final_val = 0 # จีบไม่ติด
+        return 0, "CLOSED"
     elif status == 'OPEN' and val > 0:
-        final_val += 2 
+        final_val += 1 # เปิดใจรับ
 
     current_score = st.session_state.weights[a][b]
     new_score = max(0, min(current_score + final_val, MAX_HEART))
     st.session_state.weights[a][b] = new_score
-    return "SUCCESS"
+    
+    return final_val, "SUCCESS"
 
 def get_top_crush(name):
     scores = st.session_state.weights.get(name, {})
@@ -121,36 +120,9 @@ def ai_choose_target(person, on_island):
         target = random.choice(opps)
     return target
 
-def paradise_mechanic(p1_name, p2_name):
-    roll = random.randint(1, 100)
-    pair_key = tuple(sorted((p1_name, p2_name)))
-    
-    if roll <= 15: 
-        res = "AWKWARD"
-        desc = "บรรยากาศเดตมาคุ... ถามคำตอบคำ (สถานะ: มองหน้าไม่ติด)"
-        update_rel(p1_name, p2_name, -1); update_rel(p2_name, p1_name, -1)
-    elif roll <= 40: 
-        res = "FRIENDZONE"
-        desc = "คุยถูกคอแต่ฟีลพี่น้อง! (สถานะ: Friendzone)"
-        update_rel(p1_name, p2_name, 1); update_rel(p2_name, p1_name, 1)
-    elif roll <= 85: 
-        res = "GOOD"
-        desc = "เดตโรแมนติก ความรู้สึกดีๆ เริ่มก่อตัว"
-        update_rel(p1_name, p2_name, 3); update_rel(p2_name, p1_name, 2)
-    else: 
-        res = "SOULMATE"
-        desc = "สปาร์คแรงมาก! นอนคุยกันยันเช้า (สถานะ: 💖 Soulmate)"
-        update_rel(p1_name, p2_name, 5); update_rel(p2_name, p1_name, 5)
-    
-    st.session_state.couple_vibe[pair_key] = res
-    return desc
-
 # --- 🏗️ 5. UI: SETUP PHASE ---
 if st.session_state.step == "SETUP":
-    st.title("🔥 Single's Inferno: Casting (Original Netflix Style)")
-    st.markdown("### ตั้งค่าผู้เข้าแข่งขัน 12 คน (ชาย 6 หญิง 6)")
-    st.info("ℹ️ ระบบจะสุ่ม อายุ, อาชีพ, และนิสัย ให้เมื่อเริ่มเกม | **อัปโหลดรูปจากเครื่องได้เลย!**")
-
+    st.title("🔥 Single's Inferno: Casting")
     col1, col2 = st.columns(2)
     m_data, f_data = [], []
 
@@ -159,7 +131,6 @@ if st.session_state.step == "SETUP":
         for i in range(6):
             c1, c2 = st.columns([3, 2])
             name = c1.text_input(f"M{i+1}", DEFAULT_CAST_M[i], key=f"m_{i}")
-            # เปลี่ยนกลับเป็น File Uploader
             uploaded = c2.file_uploader(f"รูป {name}", type=['jpg','png','jpeg'], key=f"mi_{i}")
             img_src = uploaded if uploaded else DEF_IMG_M
             m_data.append({"name": name, "img": img_src, "gender": "M"})
@@ -169,14 +140,12 @@ if st.session_state.step == "SETUP":
         for i in range(6):
             c1, c2 = st.columns([3, 2])
             name = c1.text_input(f"F{i+1}", DEFAULT_CAST_F[i], key=f"f_{i}")
-            # เปลี่ยนกลับเป็น File Uploader
             uploaded = c2.file_uploader(f"รูป {name}", type=['jpg','png','jpeg'], key=f"fi_{i}")
             img_src = uploaded if uploaded else DEF_IMG_F
             f_data.append({"name": name, "img": img_src, "gender": "F"})
 
     st.divider()
     if st.button("🚀 ยืนยันรายชื่อ & เริ่มรายการ!"):
-        # Generate Hidden Stats
         full_pool = []
         for p in m_data + f_data:
             p['age'] = random.randint(21, 32)
@@ -191,7 +160,7 @@ if st.session_state.step == "SETUP":
         names = [p['name'] for p in st.session_state.master_pool]
         st.session_state.weights = {n: {target: 0 for target in names if target != n} for n in names}
         
-        log_event("System", f"☀️ --- DAY 1 เริ่มต้นขึ้นแล้ว! สมาชิก 8 คนแรกเดินทางมาถึงเกาะนรก ---")
+        log_event("System", f"☀️ --- DAY 1 เริ่มต้นขึ้นแล้ว! ---")
         st.session_state.step = "GAME"
         st.rerun()
 
@@ -201,71 +170,62 @@ elif not st.session_state.game_over:
     
     # Sidebar
     with st.sidebar:
-        st.markdown("### 🛠️ Control Center")
         if st.button("🧹 Reset All"): st.session_state.clear(); st.rerun()
-        
         st.divider()
         st.markdown("### 💘 Heart Status")
         for p in st.session_state.cast:
             tags = ""
             if p['name'] in st.session_state.statuses:
                 s = st.session_state.statuses[p['name']]
-                tags += f" <span class='status-tag' style='background:#555'>🔒CLOSED</span>" if s == 'CLOSED' else f" <span class='status-tag' style='background:#2ca02c'>🔓OPEN</span>"
+                tags += f" <span class='status-tag' style='background:#555'>🔒</span>" if s == 'CLOSED' else f" <span class='status-tag' style='background:#2ca02c'>🔓</span>"
             
             for pair_key, vibe in st.session_state.couple_vibe.items():
                 if p['name'] in pair_key:
                     partner = pair_key[0] if pair_key[1] == p['name'] else pair_key[1]
                     if vibe == "SOULMATE": tags += f" <span class='status-tag tag-soulmate'>💖{partner}</span>"
                     elif vibe == "AWKWARD": tags += f" <span class='status-tag tag-awkward'>🧊{partner}</span>"
-                    elif vibe == "FRIENDZONE": tags += f" <span class='status-tag tag-friend'>🤝{partner}</span>"
 
             st.markdown(f"**{p['name']}** {tags}", unsafe_allow_html=True)
             sc = st.session_state.weights[p['name']]
             top = sorted(sc.items(), key=lambda x:x[1], reverse=True)[:1]
             if top and top[0][1] > 0:
-                st.caption(f"❤️ {top[0][0]} ({top[0][1]} pts)")
+                st.caption(f"❤️ {top[0][0]} ({top[0][1]})")
         
         st.divider()
         st.info(f"รอเข้าเกาะ: {len(st.session_state.waiting_list)} คน")
 
     # --- MAIN DASHBOARD ---
-    # 1. GRAPH
-    with st.expander("📊 Relationship Map (Live)", expanded=True):
+    with st.expander("📊 Relationship Map", expanded=True):
         col_g1, col_g2 = st.columns([3, 1])
         with col_g1:
             dot = graphviz.Digraph(engine='circo'); dot.attr(bgcolor='#0e1117')
             for p in st.session_state.cast:
                 penwidth = "3" if p['name'] in st.session_state.statuses else "0"
                 border_col = "red" if st.session_state.statuses.get(p['name'])=='CLOSED' else "green"
-                # Handle Image Type (Upload vs URL)
-                if isinstance(p['img'], str): # URL
+                if isinstance(p['img'], str): 
                     label = f'<<TABLE BORDER="{penwidth}" COLOR="{border_col}" CELLBORDER="0"><TR><TD FIXEDSIZE="TRUE" WIDTH="50" HEIGHT="50"><IMG SRC="{p["img"]}"/></TD></TR><TR><TD><FONT COLOR="white"><B>{p["name"]}</B></FONT></TD></TR></TABLE>>'
                     dot.node(p['name'], label=label, shape="none")
-                else: # BytesIO (Uploaded) - Graphviz ไม่รองรับ Bytes ตรงๆ ต้องใช้วงกลมแทน
-                    color = "#00a8ff" if p['gender'] == "M" else "#ff4dff"
+                else: 
                     icon = "🤵" if p['gender'] == "M" else "💃"
-                    dot.node(p['name'], label=f"{icon} {p['name']}", color=color, fontcolor="white", style="filled")
-            
+                    dot.node(p['name'], label=f"{icon} {p['name']}", color="white", style="filled")
             for p in st.session_state.cast:
                 sc = st.session_state.weights[p['name']]
                 if any(v > 0 for v in sc.values()):
                     t = max(sc, key=sc.get); v = sc[t]
                     if v > 0: dot.edge(p['name'], t, penwidth=str(min(v, 4)), color="#ff4b1f")
             st.graphviz_chart(dot)
-        
         with col_g2:
             st.write("#### 🕵️ Hidden Info")
             if st.session_state.info_revealed:
                 for p in st.session_state.cast:
                     st.caption(f"**{p['name']}**: {p['age']} ปี, {p['job']}")
             else:
-                st.warning("ข้อมูลลับยังไม่ถูกเปิดเผย")
+                st.warning("ความลับยังไม่เปิดเผย")
 
-    # 2. PRODUCER CONTROLS
+    # PRODUCER CONTROLS (คงเดิม)
     st.divider()
     st.markdown("### 🎬 Producer Actions")
     tab1, tab2, tab3 = st.tabs(["➕ เพิ่มสมาชิก", "🔮 อีเวนต์พิเศษ", "🌪️ ข่าวลือ"])
-    
     with tab1:
         if st.session_state.waiting_list:
             c1, c2 = st.columns([2, 1])
@@ -276,9 +236,6 @@ elif not st.session_state.game_over:
                 st.session_state.cast.append(p_obj)
                 log_event("System", f"📢 NEWCOMER! {to_add_name} เดินลงมาที่ชายหาดแล้ว!", p1=p_obj)
                 st.rerun()
-        else:
-            st.success("สมาชิกครบแล้ว!")
-
     with tab2:
         col_s1, col_s2 = st.columns(2)
         with col_s1:
@@ -291,20 +248,13 @@ elif not st.session_state.game_over:
                         crush = get_top_crush(p['name'])
                         if crush:
                             target = next(x for x in st.session_state.cast if x['name'] == crush)
-                            change = 0
-                            if p['job'] == target['job']: 
-                                change += 3
-                                txt_list.append(f"{p['name']} ปลื้ม {target['name']} ที่ทำงานสายเดียวกัน")
-                            if abs(p['age'] - target['age']) > 5:
-                                change -= 1
-                                txt_list.append(f"{p['name']} กังวลเรื่องช่องว่างระหว่างวัยกับ {target['name']}")
-                            update_rel(p['name'], target['name'], change)
+                            change, _ = update_rel(p['name'], target['name'], 2 if p['job'] == target['job'] else 0)
+                            if change > 0: txt_list.append(f"{p['name']} ปลื้ม {target['name']} (+{change})")
                     st.rerun()
         with col_s2:
-             if st.button("🔥 บังคับสลับคู่"):
+             if st.button("🔥 สลับคู่"):
                  log_event("System", "🌪️ กฎพิเศษ: ห้ามคุยกับคู่เดิม! ต้องเปลี่ยนเป้าหมาย")
                  st.rerun()
-
     with tab3:
         if st.button("🗣️ ปล่อยข่าวลือ"):
             victim = random.choice(st.session_state.cast)
@@ -325,11 +275,10 @@ elif not st.session_state.game_over:
                     if crush == target['name'] and p['name'] != victim['name']:
                         st.session_state.statuses[p['name']] = "CLOSED"
                         log_event("System", f"😡 {p['name']} ได้ยินข่าวลือแล้วหึง! ปิดใจทันที")
-
             log_event("Rumor", f"🤫 Pssst... {txt}", p1=victim)
             st.rerun()
 
-    # 3. ACTIVITIES (Restore Visual Logs!)
+    # --- 🕹️ ACTIVITIES (ระบบใหม่: คะแนน 2 ฝั่ง) ---
     st.divider()
     st.markdown("### 🕹️ Activities")
     busy_people = st.session_state.paradise_visitors
@@ -352,9 +301,27 @@ elif not st.session_state.game_over:
                 if opps:
                     target = ai_choose_target(winner, on_island) or random.choice(opps)
                     st.session_state.paradise_visitors.extend([winner['name'], target['name']])
-                    vibe_txt = paradise_mechanic(winner['name'], target['name'])
                     
-                    log_event("Paradise", f"เลือกพา {target['name']} ไปสวรรค์: {vibe_txt}", p1=winner, p2=target)
+                    # สุ่มคะแนน 2 ฝั่ง (ฐานเยอะ เพราะไปสวรรค์)
+                    s1_base = random.randint(3, 5) # ผู้ชนะ รู้สึก
+                    s2_base = random.randint(2, 5) # ผู้ถูกเลือก รู้สึก
+                    
+                    real_s1, _ = update_rel(winner['name'], target['name'], s1_base)
+                    real_s2, _ = update_rel(target['name'], winner['name'], s2_base)
+                    
+                    # Vibe Effect
+                    roll = random.randint(1, 100)
+                    if roll <= 15: 
+                        st.session_state.couple_vibe[tuple(sorted((winner['name'], target['name'])))] = "AWKWARD"
+                        vibe_txt = "แต่บรรยากาศอึดอัด (Dead Air)"
+                    elif roll >= 85:
+                        st.session_state.couple_vibe[tuple(sorted((winner['name'], target['name'])))] = "SOULMATE"
+                        vibe_txt = "สปาร์คแรงมาก! (Soulmate)"
+                    else: vibe_txt = "บรรยากาศดีโรแมนติก"
+
+                    log_event("Paradise", 
+                              f"บินไปเกาะสวรรค์ {vibe_txt}<br><span class='log-score'>({winner['name']} +{real_s1} | {target['name']} +{real_s2})</span>", 
+                              p1=winner, p2=target)
                     
                     for p in on_island:
                         my_crush = get_top_crush(p['name'])
@@ -372,28 +339,40 @@ elif not st.session_state.game_over:
                 winner = random.choice(comps)
                 target = ai_choose_target(winner, on_island)
                 if target:
-                    score = random.randint(1, 3)
-                    update_rel(winner['name'], target['name'], score)
-                    update_rel(target['name'], winner['name'], score - 1)
-                    log_event("Date", f"ชนะเกม! ชวน {target['name']} กินข้าว (+{score})", p1=winner, p2=target)
+                    # สุ่มคะแนน 2 ฝั่ง (ฐานปานกลาง)
+                    s1_base = random.randint(1, 3)
+                    s2_base = random.randint(0, 2)
+                    
+                    real_s1, _ = update_rel(winner['name'], target['name'], s1_base)
+                    real_s2, _ = update_rel(target['name'], winner['name'], s2_base)
+                    
+                    log_event("Date", 
+                              f"ชนะเกม! ชวนเดตมื้อเที่ยง<br><span class='log-score'>({winner['name']} +{real_s1} | {target['name']} +{real_s2})</span>", 
+                              p1=winner, p2=target)
                     st.rerun()
 
     with ac3:
         st.markdown("#### 👣 3. Free Time")
         if st.button("ปล่อยเดินเกมอิสระ"):
-            log_event("System", "👣 --- Free Time: ถึงเวลาทำคะแนน ---")
+            log_event("System", "👣 --- Free Time: จับคู่นั่งคุย ---")
             for p in on_island:
                 target = ai_choose_target(p, on_island)
                 if target:
-                    res = update_rel(p['name'], target['name'], 1)
+                    # สุ่มคะแนน 2 ฝั่ง (ฐานน้อย-ปานกลาง)
+                    s1_base = random.randint(0, 2) # คนเดินไปหา
+                    s2_base = random.randint(0, 1) # คนถูกหา
+                    
+                    real_s1, res1 = update_rel(p['name'], target['name'], s1_base)
+                    real_s2, res2 = update_rel(target['name'], p['name'], s2_base)
+                    
                     trait_txt = f"({p['trait']})"
-                    if res == "BLOCKED_BY_CLOSED":
-                        log_event("Fail", f"เข้าหาผิดจังหวะ! อีกฝ่ายปิดใจอยู่ (0)", p1=p, p2=target)
-                    elif res == "BLOCKED_BY_AWKWARD":
-                        log_event("Fail", f"บรรยากาศยังมาคุจากเมื่อวาน... (0)", p1=p, p2=target)
+                    
+                    if res1 == "BLOCKED" or res1 == "CLOSED":
+                        log_event("Fail", f"เดินไปหาแต่บรรยากาศไม่เป็นใจ (0 คะแนน)", p1=p, p2=target)
                     else:
-                        score_boost = 2 if st.session_state.couple_vibe.get(tuple(sorted((p['name'],target['name'])))) == "SOULMATE" else 1
-                        log_event("Talk", f"เนียนเข้าไปคุยทำคะแนน (+{score_boost})", p1=p, p2=target)
+                        log_event("Talk", 
+                                  f"{trait_txt} เดินไปชวนนั่งคุยริมหาด<br><span class='log-score'>({p['name']} +{real_s1} | {target['name']} +{real_s2})</span>", 
+                                  p1=p, p2=target)
             st.rerun()
 
     # --- END DAY ---
@@ -410,20 +389,15 @@ elif not st.session_state.game_over:
         log_event("System", f"💤 จบวัน! แยกย้ายกันนอน... เตรียมเข้าสู่ DAY {st.session_state.day}")
         st.rerun()
 
-    # --- LOGS DISPLAY (RESTORED STYLE) ---
+    # --- LOGS DISPLAY ---
     st.subheader("📝 บันทึกเหตุการณ์ (Visual Logs)")
     for log in reversed(st.session_state.logs[-15:]):
-        # 1. System Logs (ไม่มีรูปคน)
         if log['type'] == "System":
             st.info(f"☀️ DAY {log['day']}: {log['txt']}")
-        
-        # 2. Interactive Logs (มีรูป ซ้าย-ขวา)
         elif log.get('p1') and log.get('p2'):
             with st.container():
                 c1, c2, c3 = st.columns([1, 4, 1])
-                c1.image(log['p1']['img'], width=80) # รูปซ้าย
-                
-                # ตรงกลาง ข้อความ + คะแนน
+                c1.image(log['p1']['img'], width=80) 
                 with c2:
                     st.markdown(f"""
                     <div class="log-text">
@@ -432,10 +406,7 @@ elif not st.session_state.game_over:
                     </div>
                     """, unsafe_allow_html=True)
                     st.divider()
-                
-                c3.image(log['p2']['img'], width=80) # รูปขวา
-
-        # 3. Solo Logs (มีรูปคนเดียว เช่น ข่าวลือ)
+                c3.image(log['p2']['img'], width=80) 
         elif log.get('p1'):
             with st.container():
                 c1, c2 = st.columns([1, 5])
@@ -445,7 +416,7 @@ elif not st.session_state.game_over:
 
 # --- 💖 7. FINALE ---
 else:
-    st.title("💖 THE FINALE: บทสรุปความรัก")
+    st.title("💖 THE FINALE")
     if st.session_state.finale_phase == "START":
         if st.button("เริ่มพิธีเลือกคู่"):
             women = [p for p in st.session_state.cast if p['gender'] == 'F']
@@ -454,7 +425,6 @@ else:
             st.session_state.current_f_idx = 0
             st.session_state.finale_phase = "TURN"
             st.rerun()
-
     elif st.session_state.finale_phase == "TURN":
         if st.session_state.current_f_idx < len(st.session_state.female_order):
             curr_w = st.session_state.female_order[st.session_state.current_f_idx]
@@ -468,7 +438,6 @@ else:
                         score = st.session_state.weights[m['name']].get(curr_w['name'], 0)
                         if get_top_crush(m['name']) == curr_w['name'] and score > 5:
                             suitors.append(m)
-                
                 if suitors:
                     cols = st.columns(len(suitors))
                     for i, s in enumerate(suitors):
@@ -476,10 +445,8 @@ else:
                     st.divider()
                     best_m = max(suitors, key=lambda x: st.session_state.weights[curr_w['name']].get(x['name'], 0))
                     w_score = st.session_state.weights[curr_w['name']].get(best_m['name'], 0)
-                    
                     if w_score >= 15:
-                        st.balloons()
-                        st.success(f"💍 **MARRIED!** เลือก {best_m['name']} (Score: {w_score})")
+                        st.balloons(); st.success(f"💍 **MARRIED!** เลือก {best_m['name']} (Score: {w_score})")
                         st.session_state.final_couples.append((best_m, curr_w, "MARRIAGE"))
                     elif w_score >= 5:
                         st.success(f"❤️ **COUPLE!** เลือก {best_m['name']} (Score: {w_score})")
@@ -491,7 +458,6 @@ else:
             if st.button("คนต่อไป >>"): st.session_state.current_f_idx += 1; st.rerun()
         else:
             st.session_state.finale_phase = "RESULTS"; st.rerun()
-
     elif st.session_state.finale_phase == "RESULTS":
         st.header("📸 บทสรุปคู่รัก")
         for m, w, status in st.session_state.final_couples:
@@ -502,3 +468,4 @@ else:
                 data = [{"Day": h['day'], m['name']: h['scores'][m['name']][w['name']], w['name']: h['scores'][w['name']][m['name']]} for h in st.session_state.score_history]
                 st.line_chart(pd.DataFrame(data).set_index("Day"))
         if st.button("🔄 New Game"): st.session_state.clear(); st.rerun()
+
