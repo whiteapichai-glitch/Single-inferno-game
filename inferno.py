@@ -171,6 +171,19 @@ elif not st.session_state.game_over:
     # Sidebar
     with st.sidebar:
         if st.button("🧹 Reset All"): st.session_state.clear(); st.rerun()
+            with st.expander("ℹ️ คู่มือสถานะ (Effect Guide)"):
+            st.markdown("""
+            <small>
+            <b>สถานะบุคคล (Individual Status)</b><br>
+            🔒 <b>CLOSED (ปิดใจ):</b> หึง/นกมา! ใครมาจีบจะได้ 0 คะแนน (จีบไม่ติด)<br>
+            🔓 <b>OPEN (เปิดใจ):</b> เหงา/ต้องการคนดามใจ ใครมาจีบได้โบนัส +1 คะแนน<br>
+            <br>
+            <b>สถานะคู่รัก (Couple Vibe)</b><br>
+            💖 <b>Soulmate:</b> หวานเจี๊ยบ! คุยกันแล้วคะแนนพุ่งไว<br>
+            🧊 <b>Awkward:</b> อึดอัด (Dead Air) คุยกันแล้วคะแนนไม่ขึ้น (0)<br>
+            🤝 <b>Friendzone:</b> คุยถูกคอแต่ได้แค่พี่น้อง
+            </small>
+            """, unsafe_allow_html=True)
         st.divider()
         st.markdown("### 💘 Heart Status")
         for p in st.session_state.cast:
@@ -512,5 +525,6 @@ else:
                 data = [{"Day": h['day'], m['name']: h['scores'][m['name']][w['name']], w['name']: h['scores'][w['name']][m['name']]} for h in st.session_state.score_history]
                 st.line_chart(pd.DataFrame(data).set_index("Day"))
         if st.button("🔄 New Game"): st.session_state.clear(); st.rerun()
+
 
 
